@@ -1,0 +1,9 @@
+[package]
+name = "pcgrng"
+version = "0.1.0"
+authors = ["Baptiste Lepilleur <baptiste.lepilleur@gmail.com>"]
+description = "Rust port of main PCG Random Number Generators variant (http://www.pcg-random.org/)"
+keywords = ["random", "rng", "pcg"]
+categories = ["algorithms"]
+
+[dependencies]
