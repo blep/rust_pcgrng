@@ -12,6 +12,7 @@ mod pcgrng {
     use std::num::Wrapping;
 
 
+    #[derive(Copy, Clone)] 
     pub struct PCG32 {
         state: u64,
         seq: u64,
@@ -21,12 +22,18 @@ mod pcgrng {
 
     impl PCG32 {
 
-        pub fn new(init_state: u64, init_seq: u64) -> PCG32 {
-            let mut rng = PCG32{ state: 0, seq: (init_seq << 1) | 1 };
-            rng.step();
-            rng.state = (Wrapping(rng.state) + Wrapping(init_state)).0;
-            rng.step();
+        pub fn seed(init_state: u64, init_seq: u64) -> PCG32 {
+            let mut rng = PCG32{ state: 0, seq: 0 };
+            rng.reseed( init_state, init_seq );
             rng
+        }
+        
+        pub fn reseed(&mut self, init_state: u64, init_seq: u64) {
+            self.state = 0;
+            self.seq = (init_seq << 1) | 1;
+            self.step();
+            self.state = (Wrapping(self.state) + Wrapping(init_state)).0;
+            self.step();
         }
         
         pub fn next_u32(&mut self) -> u32 {
@@ -80,155 +87,50 @@ mod tests {
     use pcgrng;
 
     #[test]
-    fn vs_pcg() {
+    fn pcg_setseq_64_xsh_rr_32() {
         println!("      -  result:      32-bit unsigned int (uint32_t)");
         println!("      -  period:      2^64   (* 2^63 unique stream per rng)");
         println!("      -  state type:  struct PCG32 ({} bytes)", mem::size_of::<pcgrng::PCG32>());
         println!("      -  output func: XSH-RR");
-        let mut rng = pcgrng::PCG32::new(42, 0);
-        
+        let mut rng = pcgrng::PCG32::seed(0, 0);
+        let test_script = include_str!("../testdata/pcg_setseq_64_xsh_rr_32.testscript");
+        check_script_results( &mut rng, test_script );
     }
     
-    
-    /*
-            
-#define XX_NUMBITS                  "  32bit:"
-#define XX_NUMVALUES                6
-#define XX_NUMWRAP                  6
-#define XX_PRINT_RNGVAL(value)      printf(" 0x%08x", value)
-#define XX_RAND_DECL                struct pcg_state_64 rng;
-#define XX_SEEDSDECL(seeds)         uint64_t seeds[1];
-#define XX_SRANDOM_SEEDARGS(seeds)  seeds[0]
-#define XX_SRANDOM_SEEDCONSTS       42u
-#define XX_SRANDOM(...)             \
-            pcg_unique_64_srandom_r(&rng, __VA_ARGS__)
-#define XX_RANDOM()                 \
-            pcg_unique_64_xsh_rr_32_random_r(&rng)
-#define XX_BOUNDEDRAND(bound)       \
-            pcg_unique_64_xsh_rr_32_boundedrand_r(&rng, bound)
-#define XX_ADVANCE(delta)           \
-            pcg_unique_64_advance_r(&rng, delta)
-
-int main(int argc, char** argv)
-{
-    // Read command-line options
-     
-    int rounds = 5;
-    bool nondeterministic_seed = false;
-    
-    ++argv; --argc;
-    if (argc > 0 && strcmp( argv[ 0 ], "--redirect-output" ) == 0) {
-        ++argv; --argc;
-        if ( argc == 0 )
-            return 2;
-        const char *path = argv[0];
-        ++argv; --argc;
-        if ( freopen( path, "wt", stdout ) == NULL )
-            return 1;
-        if ( freopen( path, "wt", stderr ) == NULL )
-            return 1;
-    }
-    if (argc > 0 && strcmp(argv[0], "-r") == 0) {
-         nondeterministic_seed = true;
-         ++argv; --argc;
-    }
-    if (argc > 0) {
-         rounds = atoi(argv[0]);
-    }
-    
-    // In this version of the code, we'll use a local rng, rather than the
-    // global one.
-    
-    XX_RAND_DECL
-    
-    // You should *always* seed the RNG.  The usual time to do it is the
-    // point in time when you create RNG (typically at the beginning of the
-    // program).
-    //
-    // XX_SRANDOM_R takes two YY-bit constants (the initial state, and the
-    // rng sequence selector; rngs with different sequence selectors will
-    // *never* have random sequences that coincide, at all) - the code below 
-    // shows three possible ways to do so.
-
-    if (nondeterministic_seed) {
-        // Seed with external entropy
-        
-        XX_SEEDSDECL(seeds)
-        entropy_getbytes((void*) seeds, sizeof(seeds)); 
-        XX_SRANDOM(XX_SRANDOM_SEEDARGS(seeds));
-    } else {
-        // Seed with a fixed constant
-        
-        XX_SRANDOM(XX_SRANDOM_SEEDCONSTS);
-    }
-    
-    printf(XX_INFO);
- 
-    for (int round = 1; round <= rounds; ++round) {
-        printf("Round %d:\n", round);
-
-        /* Make some XX-bit numbers */
-        printf(XX_NUMBITS);
-        for (int i = 0; i < XX_NUMVALUES; ++i) {
-            if (i > 0 && i % XX_NUMWRAP == 0)
-               printf("\n\t");
-            XX_PRINT_RNGVAL(XX_RANDOM());
-        }
-        printf("\n");
-
-        printf("  Again:");
-        XX_ADVANCE(-XX_NUMVALUES);
-        for (int i = 0; i < XX_NUMVALUES; ++i) {
-            if (i > 0 && i % XX_NUMWRAP == 0)
-               printf("\n\t");
-            XX_PRINT_RNGVAL(XX_RANDOM());
-        }
-        printf("\n");
-        
-
-        /* Toss some coins */
-        printf("  Coins: ");
-        for (int i = 0; i < 65; ++i)
-            printf("%c", XX_BOUNDEDRAND(2) ? 'H' : 'T');
-        printf("\n");
-        
-        /* Roll some dice */
-        printf("  Rolls:");
-        for (int i = 0; i < 33; ++i)
-            printf(" %d", (int) XX_BOUNDEDRAND(6)+1);
-        printf("\n");
-        
-        /* Deal some cards */
-        enum { SUITS = 4, NUMBERS = 13, CARDS = 52 };
-        char cards[CARDS];
-        
-        for (int i = 0; i < CARDS; ++i)
-           cards[i] = i;
-        
-        for (int i = CARDS; i > 1; --i) {
-           int chosen = XX_BOUNDEDRAND(i);
-           char card     = cards[chosen];
-           cards[chosen] = cards[i-1];
-           cards[i-1]  = card;
+    fn check_script_results( rng: &mut pcgrng::PCG32, test_script: &str ) {
+        for (line_no, line) in test_script.lines().enumerate() {
+            println!("Processing test script line {}", line_no+1);
+            let line = line.trim();
+            if !line.is_empty() {
+                let mut parts = line.split(' ');
+                let command = parts.next().unwrap(); // string is not blank so guaranted to have at least one item
+                let mut params = Vec::new();
+                for part in parts {
+                    let value = part.parse::<u64>().expect( format!("Expected an unsigned integer but got {}.", part ).as_str() );
+                    params.push( value );
+                }
+                match command {
+                    "seed" => {
+                        assert!(params.len() == 2);
+                        rng.reseed( params[0], params[1] );
+                    },
+                    "next" => {
+                        assert!(params.len() == 1);
+                        let actual = rng.next_u32();
+                        let expected = params[0] as u32;
+                        assert_eq!( expected, actual );
+                    },
+                    "next_bounded" => {
+                        assert!(params.len() == 2);
+                        let (bound, expected) = (params[0] as u32, params[1] as i32);
+                        println!("next_bounded {} {}", bound, expected);
+                        let actual = rng.i32_in_range(0, bound as i32);
+                        assert_eq!( expected, actual );
+                    },
+                    _ => panic!("Unknown command: {}.", command ),
+                }
+            }
         }
         
-        printf("  Cards:");
-        static const char number[] = {'A', '2', '3', '4', '5', '6', '7',
-                                      '8', '9', 'T', 'J', 'Q', 'K'};
-        static const char suit[] = {'h', 'c', 'd', 's'};
-        for (int i = 0; i < CARDS; ++i) {
-           printf(" %c%c", number[cards[i] / SUITS], suit[cards[i] % SUITS]);
-           if ((i+1) % 22 == 0)
-               printf("\n\t");
-        }
-        printf("\n");
-        
-        printf("\n");
     }
-
-    return 0;
-}             
-    
-    
-    */
 }
