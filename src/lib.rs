@@ -14,11 +14,39 @@ mod pcgrng {
 
     #[derive(Copy, Clone)] 
     pub struct PCG32 {
-        state: u64,
-        seq: u64,
+        pub state: u64,
+        pub seq: u64,
     }
 
-    const PCG_MULTIPLIER_64: u64 = 6364136223846793005;
+    const PCG_DEFAULT_MULTIPLIER_64: u64 = 6364136223846793005;
+    
+    /** Multi-step advance functions (jump-ahead, jump-back).
+     *
+     * The method used here is based on Brown, "Random Number Generation
+     * with Arbitrary Stride,", Transactions of the American Nuclear
+     * Society (Nov. 1994).  The algorithm is very similar to fast
+     * exponentiation.
+     *
+     * Even though delta is an unsigned integer, we can pass a
+     * signed integer to go backwards, it just goes "the long way round".
+     */
+    fn pcg_advance_lcg_64( state: u64, delta: u64, mult: u64, plus: u64) -> u64 {
+        let mut acc_mult = Wrapping(1u64);
+        let mut acc_plus = Wrapping(0u64);
+        let mut cur_mult = Wrapping(mult);
+        let mut cur_plus = Wrapping(plus);
+        let mut cur_delta = Wrapping(delta);
+        while cur_delta > Wrapping(0) {
+            if (cur_delta & Wrapping(1)) != Wrapping(0) {
+                acc_mult *= cur_mult;
+                acc_plus = acc_plus * cur_mult + cur_plus;
+            }
+            cur_plus = (cur_mult + Wrapping(1)) * cur_plus;
+            cur_mult *= cur_mult;
+            cur_delta /= Wrapping(2);
+        }
+        (acc_mult * Wrapping(state) + acc_plus).0
+    }
 
     impl PCG32 {
 
@@ -54,7 +82,7 @@ mod pcgrng {
         }
 
         fn step(&mut self) {
-            self.state = (Wrapping(self.state) * Wrapping(PCG_MULTIPLIER_64) + Wrapping(self.seq)).0;
+            self.state = (Wrapping(self.state) * Wrapping(PCG_DEFAULT_MULTIPLIER_64) + Wrapping(self.seq)).0;
         }
         
         pub fn i32_in_range(&mut self, low: i32, high: i32) -> i32 {
@@ -76,6 +104,11 @@ mod pcgrng {
                 }
             }
         }
+        
+        pub fn advance( &mut self, delta: i64) {
+            self.state = pcg_advance_lcg_64( self.state, delta as u64, PCG_DEFAULT_MULTIPLIER_64, self.seq);
+        }
+
     }
 
 }
@@ -97,6 +130,15 @@ mod tests {
         check_script_results( &mut rng, test_script );
     }
     
+    #[test]
+    fn pcg32_advance_to_repeat_last() {
+        let mut rng = pcgrng::PCG32::seed(0, 0);
+        let v1 = rng.next_u32();
+        rng.advance(-1);
+        let v2 = rng.next_u32();
+        assert_eq!(v1, v2);
+    }
+    
     fn check_script_results( rng: &mut pcgrng::PCG32, test_script: &str ) {
         for (line_no, line) in test_script.lines().enumerate() {
             println!("Processing test script line {}", line_no+1);
@@ -116,6 +158,7 @@ mod tests {
                     },
                     "next" => {
                         assert!(params.len() == 1);
+                        println!("state=0x{:016x}", rng.state);
                         let actual = rng.next_u32();
                         let expected = params[0] as u32;
                         assert_eq!( expected, actual );
@@ -127,6 +170,12 @@ mod tests {
                         let actual = rng.i32_in_range(0, bound as i32);
                         assert_eq!( expected, actual );
                     },
+                    "advance" => {
+                        assert!(params.len() == 1);
+                        let delta = params[0] as i64;
+                        println!("advance delta=0x{:016x}, state=0x{:016x}", delta, rng.state);
+                        rng.advance(delta);
+                    }
                     _ => panic!("Unknown command: {}.", command ),
                 }
             }

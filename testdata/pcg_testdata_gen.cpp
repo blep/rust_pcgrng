@@ -1,7 +1,7 @@
 #include "pcg_variants.h"
 #include <stdio.h>
 
-static int32_t steps[] = {
+static int64_t steps[] = {
     1,
     5,
     21,
@@ -31,7 +31,8 @@ static int32_t steps[] = {
     -85,
     -21,
     -5,
-    -1
+    -1,
+    0
 };
 
 #define NB_STEP (sizeof(steps) / sizeof(steps[0]))
@@ -55,14 +56,16 @@ int main(int argc, const char **argv)
         fprintf( out, "next_bounded 100 %u\n", value );
     }
 
-    for ( i=0; i < 100; ++i ) {
-        value = pcg_setseq_64_xsh_rr_32_boundedrand_r(&rng, 0x40000001u);
-        fprintf( out, "next_bounded %u %u\n", 0x40000001u, value );
-    }
+    //for ( i=0; i < 100; ++i ) {
+    //    value = pcg_setseq_64_xsh_rr_32_boundedrand_r(&rng, 0x40000001u);
+    //    fprintf( out, "next_bounded %u %u\n", 0x40000001u, value );
+    //}
 
     for ( i=0; i < NB_STEP; ++i ) {
-        pcg_setseq_64_advance_r(&rng, steps[i]);
-        fprintf( out, "advance %u\n", steps[i] );
+        // PCG-c API indicates negative value should just be cast to unsigned (after sign extension)
+        uint64_t delta = static_cast<uint64_t>(steps[i]);
+        pcg_setseq_64_advance_r(&rng, delta);
+        fprintf( out, "advance %llu\n", delta );
         value = pcg_setseq_64_xsh_rr_32_random_r(&rng);
         fprintf( out, "next %u\n", value );
     }
