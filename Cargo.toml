@@ -5,5 +5,7 @@ authors = ["Baptiste Lepilleur <baptiste.lepilleur@gmail.com>"]
 description = "Rust port of main PCG Random Number Generators variant (http://www.pcg-random.org/)"
 keywords = ["random", "rng", "pcg"]
 categories = ["algorithms"]
+repository = "https://github.com/blep/rust_pcgrng.git"
+homepage = "https://github.com/blep/rust_pcgrng.git"
 
 [dependencies]
