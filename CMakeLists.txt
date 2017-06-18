@@ -36,9 +36,8 @@ option(PCG_C_BUILD_TESTS "Build pgc-c tests" OFF)
 
 add_subdirectory( ${PCG_C_DIR} )
 
-set(SOURCES
-    testdata/pcg_testdata_gen.cpp
-)
-
-add_executable( pcg_testdata_gen ${SOURCES} )
+add_executable( pcg_testdata_gen testdata/pcg_testdata_gen.cpp )
 target_link_libraries( pcg_testdata_gen pcg_random_lib )  
+
+add_executable( pcg_estimate_pi examples/estimate_pi.cpp )
+target_link_libraries( pcg_estimate_pi pcg_random_lib )  
